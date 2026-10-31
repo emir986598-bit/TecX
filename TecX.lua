@@ -5,6 +5,8 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
+local Player = Players.LocalPlayer
+
 local Theme = {
     Background = Color3.fromRGB(15, 16, 22),
     Secondary = Color3.fromRGB(21, 22, 30),
@@ -15,14 +17,15 @@ local Theme = {
     Border = Color3.fromRGB(42, 43, 55)
 }
 
-local function Create(class, properties, parent)
-    local object = Instance.new(class)
+local function Create(className, properties, parent)
+    local object = Instance.new(className)
 
-    for property, value in pairs(properties) do
+    for property, value in pairs(properties or {}) do
         object[property] = value
     end
 
     object.Parent = parent
+
     return object
 end
 
@@ -32,34 +35,70 @@ local function Corner(parent, radius)
     }, parent)
 end
 
-local function Stroke(parent, color, transparency)
+local function Stroke(parent, color)
     Create("UIStroke", {
         Color = color or Theme.Border,
-        Transparency = transparency or 0,
-        Thickness = 1
+        Thickness = 1,
+        Transparency = 0
     }, parent)
 end
 
 local function Tween(object, properties, duration)
-    TweenService:Create(
+    if not object or not object.Parent then
+        return
+    end
+
+    local tween = TweenService:Create(
         object,
-        TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        TweenInfo.new(
+            duration or 0.2,
+            Enum.EasingStyle.Quart,
+            Enum.EasingDirection.Out
+        ),
         properties
-    ):Play()
+    )
+
+    tween:Play()
+
+    return tween
 end
 
 function TecX:CreateWindow(config)
-    config = config or {}
+    config = typeof(config) == "table" and config or {}
 
-    local Player = Players.LocalPlayer
     local PlayerGui = Player:WaitForChild("PlayerGui")
 
-    local ScreenGui = Create("ScreenGui", {
-        Name = "TecX",
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    }, CoreGui)
+    -- Eski kütüphane pencerelerini temizle.
+    pcall(function()
+        local old = CoreGui:FindFirstChild("TecX_UI")
+        if old then
+            old:Destroy()
+        end
+    end)
 
+    local oldPlayerGui = PlayerGui:FindFirstChild("TecX_UI")
+    if oldPlayerGui then
+        oldPlayerGui:Destroy()
+    end
+
+    -- ScreenGui
+    local ScreenGui = Create("ScreenGui", {
+        Name = "TecX_UI",
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        IgnoreGuiInset = true
+    }, nil)
+
+    -- CoreGui öncelikli, PlayerGui yedek.
+    local success = pcall(function()
+        ScreenGui.Parent = CoreGui
+    end)
+
+    if not success then
+        ScreenGui.Parent = PlayerGui
+    end
+
+    -- Main Window
     local Main = Create("Frame", {
         Name = "Main",
         Size = UDim2.fromOffset(650, 420),
@@ -72,6 +111,7 @@ function TecX:CreateWindow(config)
     Corner(Main, 12)
     Stroke(Main)
 
+    -- Topbar
     local Topbar = Create("Frame", {
         Name = "Topbar",
         Size = UDim2.new(1, 0, 0, 48),
@@ -82,15 +122,16 @@ function TecX:CreateWindow(config)
     local Title = Create("TextLabel", {
         Name = "Title",
         Position = UDim2.fromOffset(18, 0),
-        Size = UDim2.new(1, -80, 1, 0),
+        Size = UDim2.new(1, -75, 1, 0),
         BackgroundTransparency = 1,
-        Text = config.Name or "TecX",
+        Text = tostring(config.Name or "TecX"),
         TextColor3 = Theme.Text,
         TextSize = 16,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left
     }, Topbar)
 
+    -- Close Button
     local Close = Create("TextButton", {
         Name = "Close",
         Position = UDim2.new(1, -43, 0, 7),
@@ -106,58 +147,109 @@ function TecX:CreateWindow(config)
     Corner(Close, 8)
 
     Close.MouseEnter:Connect(function()
-        Tween(Close, {BackgroundColor3 = Color3.fromRGB(180, 55, 65)})
+        Tween(Close, {
+            BackgroundColor3 = Color3.fromRGB(180, 55, 65)
+        })
     end)
 
     Close.MouseLeave:Connect(function()
-        Tween(Close, {BackgroundColor3 = Theme.Element})
+        Tween(Close, {
+            BackgroundColor3 = Theme.Element
+        })
     end)
+
+    -- Drag System
+    local dragging = false
+    local dragStart
+    local startPosition
+
+    local inputChangedConnection
+    local inputEndedConnection
+
+    Topbar.InputBegan:Connect(function(input)
+        local inputType = input.UserInputType
+
+        if inputType == Enum.UserInputType.MouseButton1
+            or inputType == Enum.UserInputType.Touch then
+
+            dragging = true
+            dragStart = input.Position
+            startPosition = Main.Position
+        end
+    end)
+
+    inputChangedConnection = UserInputService.InputChanged:Connect(function(input)
+        if not dragging then
+            return
+        end
+
+        local inputType = input.UserInputType
+
+        if inputType ~= Enum.UserInputType.MouseMovement
+            and inputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        local delta = input.Position - dragStart
+
+        Main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end)
+
+    inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
+        local inputType = input.UserInputType
+
+        if inputType == Enum.UserInputType.MouseButton1
+            or inputType == Enum.UserInputType.Touch then
+
+            dragging = false
+        end
+    end)
+
+    -- Window Data
+    local Window = {
+        ScreenGui = ScreenGui,
+        Main = Main,
+        Tabs = {},
+        CurrentTab = nil,
+        Destroyed = false
+    }
+
+    -- Connection Cleanup
+    local function Cleanup()
+        if Window.Destroyed then
+            return
+        end
+
+        Window.Destroyed = true
+        dragging = false
+
+        if inputChangedConnection then
+            inputChangedConnection:Disconnect()
+            inputChangedConnection = nil
+        end
+
+        if inputEndedConnection then
+            inputEndedConnection:Disconnect()
+            inputEndedConnection = nil
+        end
+    end
+
+    ScreenGui.Destroying:Connect(Cleanup)
 
     Close.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
     end)
 
-    -- Draggable window
-    local dragging = false
-    local dragInput
-    local dragStart
-    local startPosition
-
-    Topbar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-
-            dragging = true
-            dragStart = input.Position
-            startPosition = Main.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+    function Window:Destroy()
+        if ScreenGui.Parent then
+            ScreenGui:Destroy()
         end
-    end)
-
-    Topbar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input == dragInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-
-            Main.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
+    end
 
     -- Sidebar
     local Sidebar = Create("Frame", {
@@ -168,13 +260,13 @@ function TecX:CreateWindow(config)
         BorderSizePixel = 0
     }, Main)
 
-    local SidebarPadding = Create("UIPadding", {
+    Create("UIPadding", {
         PaddingTop = UDim.new(0, 12),
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 10)
     }, Sidebar)
 
-    local TabList = Create("UIListLayout", {
+    Create("UIListLayout", {
         Padding = UDim.new(0, 7),
         SortOrder = Enum.SortOrder.LayoutOrder
     }, Sidebar)
@@ -189,41 +281,46 @@ function TecX:CreateWindow(config)
         ClipsDescendants = true
     }, Main)
 
-    local Window = {
-        ScreenGui = ScreenGui,
-        Main = Main,
-        Tabs = {},
-        CurrentTab = nil
-    }
-
+    -- Tab Selection
     local function SelectTab(tab)
         if Window.CurrentTab == tab then
             return
         end
 
+        if Window.CurrentTab then
+            local previous = Window.CurrentTab
+
+            previous.Container.Visible = false
+
+            Tween(previous.Button, {
+                BackgroundColor3 = Theme.Element,
+                TextColor3 = Theme.SubText
+            })
+        end
+
         Window.CurrentTab = tab
 
-        for _, existingTab in ipairs(Window.Tabs) do
-            local selected = existingTab == tab
+        tab.Container.Visible = true
+        tab.Container.CanvasPosition = Vector2.zero
 
-            Tween(existingTab.Button, {
-                BackgroundColor3 = selected and Theme.Accent or Theme.Element
-            })
-
-            Tween(existingTab.Button, {
-                TextColor3 = selected and Theme.Text or Theme.SubText
-            })
-
-            existingTab.Container.Visible = selected
-        end
+        Tween(tab.Button, {
+            BackgroundColor3 = Theme.Accent,
+            TextColor3 = Theme.Text
+        })
     end
 
+    -- Create Tab
     function Window:CreateTab(tabName)
+        if Window.Destroyed then
+            return nil
+        end
+
+        tabName = tostring(tabName or "Tab")
+
         local TabButton = Create("TextButton", {
             Name = tabName,
             Size = UDim2.new(1, 0, 0, 36),
             BackgroundColor3 = Theme.Element,
-            BackgroundTransparency = 0,
             Text = tabName,
             TextColor3 = Theme.SubText,
             TextSize = 13,
@@ -235,13 +332,15 @@ function TecX:CreateWindow(config)
 
         local Container = Create("ScrollingFrame", {
             Name = tabName .. "Content",
+            Position = UDim2.zero,
             Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
             ScrollBarThickness = 3,
             ScrollBarImageColor3 = Theme.Accent,
             CanvasSize = UDim2.new(0, 0, 0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            AutomaticCanvasSize = Enum.AutomaticSize.None,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
             Visible = false
         }, Content)
 
@@ -252,10 +351,35 @@ function TecX:CreateWindow(config)
             PaddingBottom = UDim.new(0, 15)
         }, Container)
 
-        Create("UIListLayout", {
+        local ListLayout = Create("UIListLayout", {
             Padding = UDim.new(0, 10),
             SortOrder = Enum.SortOrder.LayoutOrder
         }, Container)
+
+        -- Manual Canvas Update
+        -- Yalnızca içerik boyutu gerçekten değiştiğinde çalışır.
+        local lastCanvasHeight = -1
+
+        local function UpdateCanvas()
+            local contentHeight = ListLayout.AbsoluteContentSize.Y + 30
+
+            if contentHeight == lastCanvasHeight then
+                return
+            end
+
+            lastCanvasHeight = contentHeight
+
+            Container.CanvasSize = UDim2.new(
+                0, 0,
+                0, contentHeight
+            )
+        end
+
+        local canvasConnection = ListLayout:GetPropertyChangedSignal(
+            "AbsoluteContentSize"
+        ):Connect(UpdateCanvas)
+
+        UpdateCanvas()
 
         local Tab = {
             Button = TabButton,
@@ -268,12 +392,17 @@ function TecX:CreateWindow(config)
             SelectTab(Tab)
         end)
 
+        -- Add Button
         function Tab:AddButton(buttonName, callback)
+            if Window.Destroyed then
+                return nil
+            end
+
             local Button = Create("TextButton", {
-                Name = buttonName,
+                Name = tostring(buttonName),
                 Size = UDim2.new(1, 0, 0, 42),
                 BackgroundColor3 = Theme.Element,
-                Text = buttonName,
+                Text = tostring(buttonName),
                 TextColor3 = Theme.Text,
                 TextSize = 13,
                 Font = Enum.Font.GothamMedium,
@@ -281,7 +410,7 @@ function TecX:CreateWindow(config)
             }, Container)
 
             Corner(Button, 8)
-            Stroke(Button, Theme.Border)
+            Stroke(Button)
 
             Button.MouseEnter:Connect(function()
                 Tween(Button, {
@@ -300,42 +429,53 @@ function TecX:CreateWindow(config)
                     BackgroundColor3 = Theme.Accent
                 }, 0.1)
 
-                task.spawn(function()
-                    if typeof(callback) == "function" then
+                if typeof(callback) == "function" then
+                    task.spawn(function()
                         local success, err = pcall(callback)
 
                         if not success then
-                            warn("[TecX] Button callback error:", err)
+                            warn("[TecX] Callback Error:", err)
                         end
-                    end
 
-                    if Button.Parent then
-                        Tween(Button, {
-                            BackgroundColor3 = Theme.Element
-                        }, 0.2)
-                    end
-                end)
+                        if Button.Parent then
+                            Tween(Button, {
+                                BackgroundColor3 = Theme.Element
+                            })
+                        end
+                    end)
+                else
+                    Tween(Button, {
+                        BackgroundColor3 = Theme.Element
+                    })
+                end
             end)
 
             return Button
         end
 
+        -- Add Label
         function Tab:AddLabel(labelText)
+            if Window.Destroyed then
+                return nil
+            end
+
             local Label = Create("TextLabel", {
                 Name = "Label",
                 Size = UDim2.new(1, 0, 0, 35),
                 BackgroundTransparency = 1,
-                Text = labelText,
+                Text = tostring(labelText or ""),
                 TextColor3 = Theme.SubText,
                 TextSize = 13,
                 Font = Enum.Font.Gotham,
                 TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Center,
                 TextWrapped = true
             }, Container)
 
             return Label
         end
 
+        -- İlk sekmeyi otomatik aç.
         if #self.Tabs == 1 then
             SelectTab(Tab)
         end
