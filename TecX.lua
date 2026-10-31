@@ -1,6 +1,9 @@
 local TecX = {}
 
---// Services
+--==================================================
+-- SERVICES
+--==================================================
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -8,35 +11,53 @@ local CoreGui = game:GetService("CoreGui")
 
 local Player = Players.LocalPlayer
 
-assert(Player, "[TecX] This library must run on the client.")
+assert(Player, "[TecX] Client environment required.")
 
---// Theme
+--==================================================
+-- THEME
+--==================================================
+
 local Theme = {
-    Background = Color3.fromRGB(15, 16, 22),
-    Secondary = Color3.fromRGB(21, 22, 30),
-    Element = Color3.fromRGB(29, 30, 40),
-    ElementHover = Color3.fromRGB(42, 39, 59),
+    Background = Color3.fromRGB(10, 10, 12),
+    Surface = Color3.fromRGB(17, 17, 20),
+    Element = Color3.fromRGB(25, 25, 29),
+    Hover = Color3.fromRGB(34, 34, 39),
 
-    Accent = Color3.fromRGB(115, 85, 255),
-    AccentDark = Color3.fromRGB(79, 58, 190),
+    Accent = Color3.fromRGB(225, 225, 230),
+    AccentDark = Color3.fromRGB(150, 150, 158),
 
-    Success = Color3.fromRGB(65, 190, 125),
-    Error = Color3.fromRGB(220, 75, 85),
-    Warning = Color3.fromRGB(235, 170, 65),
+    Text = Color3.fromRGB(245, 245, 247),
+    SubText = Color3.fromRGB(145, 145, 153),
 
-    Text = Color3.fromRGB(240, 240, 245),
-    SubText = Color3.fromRGB(145, 145, 160),
-    Border = Color3.fromRGB(42, 43, 55)
+    Border = Color3.fromRGB(43, 43, 48),
+    Success = Color3.fromRGB(90, 190, 125),
+    Error = Color3.fromRGB(215, 75, 85),
+    Warning = Color3.fromRGB(220, 165, 75)
 }
 
---// Tween Manager
+--==================================================
+-- UTILITIES
+--==================================================
+
 local ActiveTweens = setmetatable({}, {
     __mode = "k"
 })
 
+local function Create(class, properties, parent)
+    local object = Instance.new(class)
+
+    for property, value in pairs(properties or {}) do
+        object[property] = value
+    end
+
+    object.Parent = parent
+
+    return object
+end
+
 local function Tween(object, properties, duration)
     if not object or not object.Parent then
-        return nil
+        return
     end
 
     local previous = ActiveTweens[object]
@@ -45,70 +66,37 @@ local function Tween(object, properties, duration)
         previous:Cancel()
     end
 
-    local tween = TweenService:Create(
+    local animation = TweenService:Create(
         object,
         TweenInfo.new(
-            duration or 0.2,
+            duration or 0.18,
             Enum.EasingStyle.Quart,
             Enum.EasingDirection.Out
         ),
         properties
     )
 
-    ActiveTweens[object] = tween
+    ActiveTweens[object] = animation
+    animation:Play()
 
-    tween.Completed:Connect(function()
-        if ActiveTweens[object] == tween then
-            ActiveTweens[object] = nil
-        end
-    end)
-
-    tween:Play()
-
-    return tween
+    return animation
 end
 
---// Instance Creator
-local function Create(className, properties, parent)
-    local object = Instance.new(className)
-
-    for property, value in pairs(properties or {}) do
-        object[property] = value
-    end
-
-    if parent then
-        object.Parent = parent
-    end
-
-    return object
-end
-
---// UI Utilities
 local function Corner(parent, radius)
     Create("UICorner", {
-        CornerRadius = UDim.new(0, radius or 8)
+        CornerRadius = UDim.new(0, radius or 9)
     }, parent)
 end
 
-local function Stroke(parent, color, transparency)
+local function Stroke(parent, transparency)
     Create("UIStroke", {
-        Color = color or Theme.Border,
+        Color = Theme.Border,
         Thickness = 1,
         Transparency = transparency or 0
     }, parent)
 end
 
-local function Gradient(parent)
-    Create("UIGradient", {
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(210, 210, 225))
-        }),
-        Rotation = 0
-    }, parent)
-end
-
-local function AddPadding(parent, left, right, top, bottom)
+local function Padding(parent, left, right, top, bottom)
     Create("UIPadding", {
         PaddingLeft = UDim.new(0, left or 0),
         PaddingRight = UDim.new(0, right or 0),
@@ -125,10 +113,9 @@ local function SafeCallback(callback, ...)
     local arguments = table.pack(...)
 
     task.spawn(function()
-        local success, err = pcall(
-            callback,
-            table.unpack(arguments, 1, arguments.n)
-        )
+        local success, err = pcall(function()
+            callback(table.unpack(arguments, 1, arguments.n))
+        end)
 
         if not success then
             warn("[TecX] Callback Error:", err)
@@ -141,34 +128,63 @@ local function FormatNumber(value)
         return tostring(math.floor(value))
     end
 
-    local formatted = string.format("%.4f", value)
-    formatted = formatted:gsub("0+$", "")
-    formatted = formatted:gsub("%.$", "")
-
-    return formatted
+    return string.format("%.4f", value)
+        :gsub("0+$", "")
+        :gsub("%.$", "")
 end
 
---// GUI Parent
-local function CreateScreenGui(name, displayOrder)
-    local screenGui = Create("ScreenGui", {
+local function GetGuiParent()
+    local success = pcall(function()
+        local test = CoreGui.Name
+    end)
+
+    if success then
+        return CoreGui
+    end
+
+    return Player:WaitForChild("PlayerGui")
+end
+
+local function CreateScreenGui(name, order)
+    local gui = Create("ScreenGui", {
         Name = name,
         ResetOnSpawn = false,
         IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        DisplayOrder = displayOrder or 10
-    })
+        DisplayOrder = order or 10
+    }, nil)
 
-    local playerGui = Player:WaitForChild("PlayerGui")
+    local parent = GetGuiParent()
 
     local success = pcall(function()
-        screenGui.Parent = CoreGui
+        gui.Parent = parent
     end)
 
     if not success then
-        screenGui.Parent = playerGui
+        gui.Parent = Player:WaitForChild("PlayerGui")
     end
 
-    return screenGui
+    return gui
+end
+
+local function RemoveOldGui(name)
+    pcall(function()
+        local old = CoreGui:FindFirstChild(name)
+
+        if old then
+            old:Destroy()
+        end
+    end)
+
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+
+    if playerGui then
+        local old = playerGui:FindFirstChild(name)
+
+        if old then
+            old:Destroy()
+        end
+    end
 end
 
 --==================================================
@@ -176,32 +192,21 @@ end
 --==================================================
 
 function TecX:CreateWindow(config)
+
     config = typeof(config) == "table" and config or {}
 
-    local PlayerGui = Player:WaitForChild("PlayerGui")
-
-    -- Remove previous window
-    pcall(function()
-        local old = CoreGui:FindFirstChild("TecX_UI")
-
-        if old then
-            old:Destroy()
-        end
-    end)
-
-    local oldPlayerGui = PlayerGui:FindFirstChild("TecX_UI")
-
-    if oldPlayerGui then
-        oldPlayerGui:Destroy()
-    end
+    RemoveOldGui("TecX_UI")
 
     local ScreenGui = CreateScreenGui("TecX_UI", 10)
 
-    -- Main
+    -- Main Window
+
     local Main = Create("Frame", {
         Name = "Main",
-        Size = UDim2.fromOffset(650, 420),
-        Position = UDim2.new(0.5, -325, 0.5, -210),
+
+        Size = UDim2.fromOffset(590, 425),
+
+        Position = UDim2.new(0.5, -295, 0.5, -212),
 
         BackgroundColor3 = Theme.Background,
         BorderSizePixel = 0,
@@ -210,50 +215,54 @@ function TecX:CreateWindow(config)
         Active = true
     }, ScreenGui)
 
-    Corner(Main, 12)
+    Corner(Main, 13)
     Stroke(Main)
 
-    -- Topbar
+    --==================================================
+    -- TOPBAR
+    --==================================================
+
     local Topbar = Create("Frame", {
         Name = "Topbar",
-        Size = UDim2.new(1, 0, 0, 48),
 
-        BackgroundColor3 = Theme.Secondary,
+        Size = UDim2.new(1, 0, 0, 49),
+
+        BackgroundColor3 = Theme.Surface,
         BorderSizePixel = 0,
+
         Active = true
     }, Main)
 
     local Title = Create("TextLabel", {
         Name = "Title",
 
-        Position = UDim2.fromOffset(18, 0),
-        Size = UDim2.new(1, -75, 1, 0),
+        Position = UDim2.fromOffset(19, 0),
+        Size = UDim2.new(1, -85, 1, 0),
 
         BackgroundTransparency = 1,
 
         Text = tostring(config.Name or "TecX"),
         TextColor3 = Theme.Text,
 
-        TextSize = 16,
+        TextSize = 15,
         Font = Enum.Font.GothamBold,
 
         TextXAlignment = Enum.TextXAlignment.Left
     }, Topbar)
 
-    -- Close
     local Close = Create("TextButton", {
         Name = "Close",
 
-        Position = UDim2.new(1, -43, 0, 7),
-        Size = UDim2.fromOffset(34, 34),
+        Position = UDim2.new(1, -42, 0, 8),
+        Size = UDim2.fromOffset(30, 30),
 
         BackgroundColor3 = Theme.Element,
 
         Text = "×",
         TextColor3 = Theme.SubText,
 
-        TextSize = 23,
-        Font = Enum.Font.GothamMedium,
+        TextSize = 21,
+        Font = Enum.Font.Gotham,
 
         AutoButtonColor = false
     }, Topbar)
@@ -262,51 +271,35 @@ function TecX:CreateWindow(config)
 
     Close.MouseEnter:Connect(function()
         Tween(Close, {
-            BackgroundColor3 = Theme.Error
+            BackgroundColor3 = Theme.Error,
+            TextColor3 = Theme.Text
         })
     end)
 
     Close.MouseLeave:Connect(function()
         Tween(Close, {
-            BackgroundColor3 = Theme.Element
+            BackgroundColor3 = Theme.Element,
+            TextColor3 = Theme.SubText
         })
     end)
 
-    -- Sidebar
-    local Sidebar = Create("Frame", {
-        Name = "Sidebar",
+    Create("Frame", {
+        Name = "TopbarLine",
 
-        Position = UDim2.fromOffset(0, 48),
-        Size = UDim2.new(0, 165, 1, -48),
+        Position = UDim2.new(0, 0, 1, -1),
+        Size = UDim2.new(1, 0, 0, 1),
 
-        BackgroundColor3 = Theme.Secondary,
+        BackgroundColor3 = Theme.Border,
         BorderSizePixel = 0
-    }, Main)
+    }, Topbar)
 
-    AddPadding(Sidebar, 10, 10, 12, 10)
+    --==================================================
+    -- WINDOW OBJECT
+    --==================================================
 
-    Create("UIListLayout", {
-        Padding = UDim.new(0, 7),
-        SortOrder = Enum.SortOrder.LayoutOrder
-    }, Sidebar)
-
-    -- Content
-    local Content = Create("Frame", {
-        Name = "Content",
-
-        Position = UDim2.new(0, 165, 0, 48),
-        Size = UDim2.new(1, -165, 1, -48),
-
-        BackgroundColor3 = Theme.Background,
-        BorderSizePixel = 0,
-
-        ClipsDescendants = true
-    }, Main)
-
-    -- Window Object
     local Window = {
-        ScreenGui = ScreenGui,
         Main = Main,
+        ScreenGui = ScreenGui,
 
         Tabs = {},
         CurrentTab = nil,
@@ -315,110 +308,124 @@ function TecX:CreateWindow(config)
     }
 
     --==================================================
-    -- CENTRAL INPUT MANAGER
+    -- INPUT MANAGER
     --==================================================
 
-    local draggingInput = nil
-    local dragStart = nil
-    local startPosition = nil
+    local connections = {}
 
+    local dragging = nil
     local activeSlider = nil
 
-    local inputConnections = {}
-
-    local function IsPointerMovement(input, initialInput)
-        if not initialInput then
+    local function IsPointerMove(input, initial)
+        if not initial then
             return false
         end
 
-        if initialInput.UserInputType == Enum.UserInputType.MouseButton1 then
+        if initial.UserInputType == Enum.UserInputType.MouseButton1 then
             return input.UserInputType == Enum.UserInputType.MouseMovement
         end
 
-        return input == initialInput
+        return input == initial
     end
 
-    local function IsPointerEnded(input, initialInput)
-        if not initialInput then
+    local function IsPointerEnd(input, initial)
+        if not initial then
             return false
         end
 
-        if initialInput.UserInputType == Enum.UserInputType.MouseButton1 then
+        if initial.UserInputType == Enum.UserInputType.MouseButton1 then
             return input.UserInputType == Enum.UserInputType.MouseButton1
         end
 
-        return input == initialInput
+        return input == initial
     end
 
-    -- Window dragging
+    -- Window Dragging
+
+    local function IsInsideCloseButton(position)
+        local p = Close.AbsolutePosition
+        local s = Close.AbsoluteSize
+
+        return position.X >= p.X
+            and position.X <= p.X + s.X
+            and position.Y >= p.Y
+            and position.Y <= p.Y + s.Y
+    end
+
     Topbar.InputBegan:Connect(function(input)
         local inputType = input.UserInputType
 
-        if inputType == Enum.UserInputType.MouseButton1
-            or inputType == Enum.UserInputType.Touch then
-
-            draggingInput = input
-            dragStart = input.Position
-            startPosition = Main.Position
+        if inputType ~= Enum.UserInputType.MouseButton1
+            and inputType ~= Enum.UserInputType.Touch then
+            return
         end
+
+        if IsInsideCloseButton(input.Position) then
+            return
+        end
+
+        dragging = {
+            Input = input,
+            Start = input.Position,
+            Position = Main.Position
+        }
     end)
 
     -- Shared InputChanged
-    inputConnections.InputChanged =
-        UserInputService.InputChanged:Connect(function(input)
 
-            if Window.Destroyed then
-                return
-            end
+    connections.InputChanged = UserInputService.InputChanged:Connect(function(input)
 
-            -- Dragging
-            if draggingInput and IsPointerMovement(input, draggingInput) then
-                local delta = input.Position - dragStart
+        if Window.Destroyed then
+            return
+        end
 
-                Main.Position = UDim2.new(
-                    startPosition.X.Scale,
-                    startPosition.X.Offset + delta.X,
+        if dragging and IsPointerMove(input, dragging.Input) then
 
-                    startPosition.Y.Scale,
-                    startPosition.Y.Offset + delta.Y
-                )
-            end
+            local delta = input.Position - dragging.Start
 
-            -- Slider
-            if activeSlider and IsPointerMovement(input, activeSlider.Input) then
-                activeSlider.Update(input.Position.X)
-            end
-        end)
+            Main.Position = UDim2.new(
+                dragging.Position.X.Scale,
+                dragging.Position.X.Offset + delta.X,
+
+                dragging.Position.Y.Scale,
+                dragging.Position.Y.Offset + delta.Y
+            )
+        end
+
+        if activeSlider and IsPointerMove(input, activeSlider.Input) then
+            activeSlider.Update(input.Position.X)
+        end
+    end)
 
     -- Shared InputEnded
-    inputConnections.InputEnded =
-        UserInputService.InputEnded:Connect(function(input)
 
-            if draggingInput and IsPointerEnded(input, draggingInput) then
-                draggingInput = nil
-            end
+    connections.InputEnded = UserInputService.InputEnded:Connect(function(input)
 
-            if activeSlider and IsPointerEnded(input, activeSlider.Input) then
-                activeSlider = nil
-            end
-        end)
+        if dragging and IsPointerEnd(input, dragging.Input) then
+            dragging = nil
+        end
 
-    -- RightShift UI visibility
-    inputConnections.InputBegan =
-        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if activeSlider and IsPointerEnd(input, activeSlider.Input) then
+            activeSlider = nil
+        end
+    end)
 
-            if Window.Destroyed or gameProcessed then
-                return
-            end
+    -- RightShift
 
-            if UserInputService:GetFocusedTextBox() then
-                return
-            end
+    connections.InputBegan = UserInputService.InputBegan:Connect(function(input, processed)
 
-            if input.KeyCode == Enum.KeyCode.RightShift then
-                Main.Visible = not Main.Visible
-            end
-        end)
+        if Window.Destroyed or processed then
+            return
+        end
+
+        if UserInputService:GetFocusedTextBox() then
+            return
+        end
+
+        if input.KeyCode == Enum.KeyCode.RightShift then
+            Main.Visible = not Main.Visible
+        end
+    end)
 
     --==================================================
     -- CLEANUP
@@ -431,16 +438,14 @@ function TecX:CreateWindow(config)
 
         Window.Destroyed = true
 
-        draggingInput = nil
+        dragging = nil
         activeSlider = nil
 
-        for _, connection in pairs(inputConnections) do
-            if connection then
-                connection:Disconnect()
-            end
+        for _, connection in pairs(connections) do
+            connection:Disconnect()
         end
 
-        table.clear(inputConnections)
+        table.clear(connections)
     end
 
     ScreenGui.Destroying:Connect(Cleanup)
@@ -467,42 +472,117 @@ function TecX:CreateWindow(config)
     end)
 
     --==================================================
-    -- TAB SYSTEM
+    -- PAGE CONTENT
+    --==================================================
+
+    local Content = Create("Frame", {
+        Name = "Content",
+
+        Position = UDim2.new(0, 0, 0, 49),
+        Size = UDim2.new(1, 0, 1, -104),
+
+        BackgroundColor3 = Theme.Background,
+        BorderSizePixel = 0,
+
+        ClipsDescendants = true
+    }, Main)
+
+    --==================================================
+    -- BOTTOM NAVIGATION
+    --==================================================
+
+    local Navigation = Create("Frame", {
+        Name = "Navigation",
+
+        Position = UDim2.new(0, 0, 1, -55),
+        Size = UDim2.new(1, 0, 0, 55),
+
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0
+    }, Main)
+
+    Create("Frame", {
+        Name = "NavigationLine",
+
+        Size = UDim2.new(1, 0, 0, 1),
+
+        BackgroundColor3 = Theme.Border,
+        BorderSizePixel = 0
+    }, Navigation)
+
+    local NavScroll = Create("ScrollingFrame", {
+        Name = "NavScroll",
+
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -24, 1, 0),
+
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+
+        ScrollBarThickness = 0,
+        ScrollingDirection = Enum.ScrollingDirection.X,
+
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.None
+    }, Navigation)
+
+    local NavLayout = Create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+
+        HorizontalAlignment = Enum.HorizontalAlignment.Left,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder
+    }, NavScroll)
+
+    NavLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        NavScroll.CanvasSize = UDim2.new(
+            0,
+            NavLayout.AbsoluteContentSize.X + 5,
+            0,
+            0
+        )
+    end)
+
+    --==================================================
+    -- TAB SELECTION
     --==================================================
 
     local function SelectTab(tab)
+
         if Window.Destroyed or Window.CurrentTab == tab then
             return
         end
 
-        local previousTab = Window.CurrentTab
+        local previous = Window.CurrentTab
 
         Window.CurrentTab = tab
 
-        -- Previous tab fade out
-        if previousTab then
-            local fadeOut = Tween(previousTab.Page, {
+        if previous then
+
+            local fadeOut = Tween(previous.Page, {
                 GroupTransparency = 1
-            }, 0.16)
+            }, 0.12)
+
+            Tween(previous.Button, {
+                BackgroundColor3 = Theme.Surface,
+                TextColor3 = Theme.SubText
+            }, 0.12)
 
             if fadeOut then
                 fadeOut.Completed:Connect(function(state)
-                    if state == Enum.PlaybackState.Completed
-                        and Window.CurrentTab ~= previousTab
-                        and previousTab.Page.Parent then
 
-                        previousTab.Page.Visible = false
+                    if state == Enum.PlaybackState.Completed
+                        and Window.CurrentTab ~= previous
+                        and previous.Page.Parent then
+
+                        previous.Page.Visible = false
                     end
                 end)
             end
-
-            Tween(previousTab.Button, {
-                BackgroundColor3 = Theme.Element,
-                TextColor3 = Theme.SubText
-            }, 0.15)
         end
 
-        -- New tab fade in
         tab.Page.Visible = true
         tab.Page.GroupTransparency = 1
 
@@ -511,7 +591,7 @@ function TecX:CreateWindow(config)
         }, 0.2)
 
         Tween(tab.Button, {
-            BackgroundColor3 = Theme.Accent,
+            BackgroundColor3 = Theme.Element,
             TextColor3 = Theme.Text
         }, 0.15)
     end
@@ -521,49 +601,54 @@ function TecX:CreateWindow(config)
     --==================================================
 
     function Window:CreateTab(tabName)
+
         if Window.Destroyed then
             return nil
         end
 
         tabName = tostring(tabName or "Tab")
 
-        local tabNumber = #Window.Tabs + 1
+        local index = #Window.Tabs + 1
 
-        -- Tab Button
+        -- Navigation Button
+
         local TabButton = Create("TextButton", {
-            Name = "Tab_" .. tabNumber,
+            Name = "Tab_" .. index,
 
-            Size = UDim2.new(1, 0, 0, 36),
+            Size = UDim2.fromOffset(115, 34),
 
-            BackgroundColor3 = Theme.Element,
+            BackgroundColor3 = Theme.Surface,
 
             Text = tabName,
             TextColor3 = Theme.SubText,
 
-            TextSize = 13,
+            TextSize = 12,
             Font = Enum.Font.GothamMedium,
 
             AutoButtonColor = false
-        }, Sidebar)
+        }, NavScroll)
 
-        Corner(TabButton, 7)
+        Corner(TabButton, 8)
 
-        -- CanvasGroup for Fade
+        -- Canvas Group
+
         local Page = Create("CanvasGroup", {
-            Name = "Page_" .. tabNumber,
+            Name = "Page_" .. index,
 
             Size = UDim2.new(1, 0, 1, 0),
 
             BackgroundTransparency = 1,
-            GroupTransparency = 1,
 
+            GroupTransparency = 1,
             ClipsDescendants = true,
+
             Visible = false
         }, Content)
 
-        -- Scroll
+        -- Scrolling Content
+
         local Container = Create("ScrollingFrame", {
-            Name = tabName .. "_Content",
+            Name = "Container_" .. index,
 
             Size = UDim2.new(1, 0, 1, 0),
 
@@ -571,22 +656,23 @@ function TecX:CreateWindow(config)
             BorderSizePixel = 0,
 
             ScrollBarThickness = 3,
-            ScrollBarImageColor3 = Theme.Accent,
+            ScrollBarImageColor3 = Theme.AccentDark,
+
+            ScrollingDirection = Enum.ScrollingDirection.Y,
 
             CanvasSize = UDim2.new(0, 0, 0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.None,
-
-            ScrollingDirection = Enum.ScrollingDirection.Y
+            AutomaticCanvasSize = Enum.AutomaticSize.None
         }, Page)
 
-        AddPadding(Container, 18, 18, 15, 15)
+        Padding(Container, 17, 17, 16, 16)
 
         local ListLayout = Create("UIListLayout", {
-            Padding = UDim.new(0, 10),
+            Padding = UDim.new(0, 9),
             SortOrder = Enum.SortOrder.LayoutOrder
         }, Container)
 
         -- Manual Canvas Management
+
         local lastCanvasHeight = -1
 
         local function UpdateCanvas()
@@ -594,7 +680,7 @@ function TecX:CreateWindow(config)
                 return
             end
 
-            local height = ListLayout.AbsoluteContentSize.Y + 30
+            local height = ListLayout.AbsoluteContentSize.Y + 32
 
             if math.abs(height - lastCanvasHeight) < 0.5 then
                 return
@@ -602,22 +688,19 @@ function TecX:CreateWindow(config)
 
             lastCanvasHeight = height
 
-            Container.CanvasSize = UDim2.new(
-                0, 0,
-                0, height
-            )
+            Container.CanvasSize = UDim2.new(0, 0, 0, height)
         end
 
-        ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(
-            UpdateCanvas
-        )
+        ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateCanvas)
 
         UpdateCanvas()
 
+        -- Tab Object
+
         local Tab = {
             Button = TabButton,
-            Container = Container,
-            Page = Page
+            Page = Page,
+            Container = Container
         }
 
         table.insert(Window.Tabs, Tab)
@@ -627,36 +710,41 @@ function TecX:CreateWindow(config)
         end)
 
         --==================================================
-        -- BUTTON
+        -- ADD BUTTON
         --==================================================
 
         function Tab:AddButton(buttonName, callback)
+
             if Window.Destroyed then
                 return nil
             end
 
             local Button = Create("TextButton", {
-                Name = tostring(buttonName),
+                Name = "Button",
 
-                Size = UDim2.new(1, 0, 0, 42),
+                Size = UDim2.new(1, 0, 0, 43),
 
                 BackgroundColor3 = Theme.Element,
 
-                Text = tostring(buttonName),
+                Text = tostring(buttonName or "Button"),
                 TextColor3 = Theme.Text,
 
-                TextSize = 13,
+                TextSize = 12,
                 Font = Enum.Font.GothamMedium,
+
+                TextXAlignment = Enum.TextXAlignment.Left,
 
                 AutoButtonColor = false
             }, Container)
 
+            Padding(Button, 13, 10, 0, 0)
+
             Corner(Button, 8)
-            Stroke(Button)
+            Stroke(Button, 0.35)
 
             Button.MouseEnter:Connect(function()
                 Tween(Button, {
-                    BackgroundColor3 = Theme.ElementHover
+                    BackgroundColor3 = Theme.Hover
                 })
             end)
 
@@ -667,13 +755,14 @@ function TecX:CreateWindow(config)
             end)
 
             Button.MouseButton1Click:Connect(function()
+
                 Tween(Button, {
-                    BackgroundColor3 = Theme.Accent
+                    BackgroundColor3 = Theme.Hover
                 }, 0.1)
 
                 SafeCallback(callback)
 
-                task.delay(0.14, function()
+                task.delay(0.15, function()
                     if Button.Parent then
                         Tween(Button, {
                             BackgroundColor3 = Theme.Element
@@ -686,10 +775,11 @@ function TecX:CreateWindow(config)
         end
 
         --==================================================
-        -- LABEL
+        -- ADD LABEL
         --==================================================
 
         function Tab:AddLabel(labelText)
+
             if Window.Destroyed then
                 return nil
             end
@@ -697,14 +787,14 @@ function TecX:CreateWindow(config)
             local Label = Create("TextLabel", {
                 Name = "Label",
 
-                Size = UDim2.new(1, 0, 0, 35),
+                Size = UDim2.new(1, 0, 0, 34),
 
                 BackgroundTransparency = 1,
 
                 Text = tostring(labelText or ""),
                 TextColor3 = Theme.SubText,
 
-                TextSize = 13,
+                TextSize = 12,
                 Font = Enum.Font.Gotham,
 
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -717,17 +807,18 @@ function TecX:CreateWindow(config)
         end
 
         --==================================================
-        -- TOGGLE
+        -- ADD TOGGLE
         --==================================================
 
         function Tab:AddToggle(toggleName, defaultState, callback)
+
             if Window.Destroyed then
                 return nil
             end
 
             local state = defaultState == true
 
-            local ToggleFrame = Create("Frame", {
+            local Frame = Create("Frame", {
                 Name = "Toggle",
 
                 Size = UDim2.new(1, 0, 0, 44),
@@ -736,12 +827,11 @@ function TecX:CreateWindow(config)
                 BorderSizePixel = 0
             }, Container)
 
-            Corner(ToggleFrame, 8)
+            Corner(Frame, 8)
+            Stroke(Frame, 0.5)
 
-            local ToggleLabel = Create("TextLabel", {
-                Name = "Title",
-
-                Position = UDim2.fromOffset(12, 0),
+            local Label = Create("TextLabel", {
+                Position = UDim2.fromOffset(13, 0),
                 Size = UDim2.new(1, -75, 1, 0),
 
                 BackgroundTransparency = 1,
@@ -749,31 +839,30 @@ function TecX:CreateWindow(config)
                 Text = tostring(toggleName),
                 TextColor3 = Theme.Text,
 
-                TextSize = 13,
+                TextSize = 12,
                 Font = Enum.Font.GothamMedium,
 
                 TextXAlignment = Enum.TextXAlignment.Left
-            }, ToggleFrame)
+            }, Frame)
 
-            -- Switch Track
+            -- Switch
+
             local Track = Create("TextButton", {
-                Name = "Track",
+                Name = "Switch",
 
-                Position = UDim2.new(1, -56, 0.5, -12),
-                Size = UDim2.fromOffset(44, 24),
+                Position = UDim2.new(1, -53, 0.5, -11),
+                Size = UDim2.fromOffset(41, 22),
 
-                BackgroundColor3 = state and Theme.Accent or Theme.Secondary,
+                BackgroundColor3 = state and Theme.AccentDark or Theme.Background,
 
                 Text = "",
                 AutoButtonColor = false
-            }, ToggleFrame)
+            }, Frame)
 
             Corner(Track, 20)
-            Stroke(Track)
 
-            Gradient(Track)
+            -- Knob
 
-            -- Switch Knob
             local Knob = Create("Frame", {
                 Name = "Knob",
 
@@ -783,30 +872,33 @@ function TecX:CreateWindow(config)
                     and UDim2.new(1, -19, 0.5, -8)
                     or UDim2.new(0, 3, 0.5, -8),
 
-                BackgroundColor3 = Color3.fromRGB(245, 245, 250),
+                BackgroundColor3 = Theme.Text,
                 BorderSizePixel = 0
             }, Track)
 
             Corner(Knob, 20)
 
-            local function SetState(newState, fireCallback)
-                newState = newState == true
+            local function SetState(value, fireCallback)
 
-                if state == newState then
+                value = value == true
+
+                if state == value then
                     return
                 end
 
-                state = newState
+                state = value
 
                 Tween(Track, {
-                    BackgroundColor3 = state and Theme.Accent or Theme.Secondary
-                }, 0.2)
+                    BackgroundColor3 = state
+                        and Theme.AccentDark
+                        or Theme.Background
+                }, 0.18)
 
                 Tween(Knob, {
                     Position = state
                         and UDim2.new(1, -19, 0.5, -8)
                         or UDim2.new(0, 3, 0.5, -8)
-                }, 0.2)
+                }, 0.18)
 
                 if fireCallback then
                     SafeCallback(callback, state)
@@ -831,10 +923,11 @@ function TecX:CreateWindow(config)
         end
 
         --==================================================
-        -- SLIDER
+        -- ADD SLIDER
         --==================================================
 
         function Tab:AddSlider(sliderName, min, max, defaultVal, callback, step)
+
             if Window.Destroyed then
                 return nil
             end
@@ -848,147 +941,157 @@ function TecX:CreateWindow(config)
 
             local range = maximum - minimum
 
-            local sliderStep = tonumber(step)
+            step = tonumber(step)
 
-            if not sliderStep or sliderStep <= 0 then
-                if minimum % 1 == 0 and maximum % 1 == 0 then
-                    sliderStep = 1
-                else
-                    sliderStep = range > 0 and range / 100 or 1
-                end
+            if not step or step <= 0 then
+                step = (minimum % 1 == 0 and maximum % 1 == 0)
+                    and 1
+                    or (range > 0 and range / 100 or 1)
             end
 
             local currentValue = minimum
-            local pendingCallbackValue
-            local callbackScheduled = false
 
-            local SliderFrame = Create("Frame", {
+            local callbackPending = false
+            local pendingValue
+
+            local Frame = Create("Frame", {
                 Name = "Slider",
 
-                Size = UDim2.new(1, 0, 0, 62),
+                Size = UDim2.new(1, 0, 0, 61),
 
                 BackgroundColor3 = Theme.Element,
                 BorderSizePixel = 0
             }, Container)
 
-            Corner(SliderFrame, 8)
+            Corner(Frame, 8)
+            Stroke(Frame, 0.5)
 
-            local SliderTitle = Create("TextLabel", {
-                Position = UDim2.fromOffset(12, 5),
-                Size = UDim2.new(1, -105, 0, 22),
+            local Label = Create("TextLabel", {
+                Position = UDim2.fromOffset(13, 5),
+                Size = UDim2.new(1, -100, 0, 20),
 
                 BackgroundTransparency = 1,
 
                 Text = tostring(sliderName),
                 TextColor3 = Theme.Text,
 
-                TextSize = 13,
+                TextSize = 12,
                 Font = Enum.Font.GothamMedium,
 
                 TextXAlignment = Enum.TextXAlignment.Left
-            }, SliderFrame)
+            }, Frame)
 
             local ValueLabel = Create("TextLabel", {
-                Position = UDim2.new(1, -90, 0, 5),
-                Size = UDim2.fromOffset(78, 22),
+                Position = UDim2.new(1, -85, 0, 5),
+                Size = UDim2.fromOffset(72, 20),
 
                 BackgroundTransparency = 1,
 
                 Text = tostring(minimum),
-                TextColor3 = Theme.Accent,
+                TextColor3 = Theme.SubText,
 
-                TextSize = 13,
-                Font = Enum.Font.GothamBold,
+                TextSize = 12,
+                Font = Enum.Font.GothamMedium,
 
                 TextXAlignment = Enum.TextXAlignment.Right
-            }, SliderFrame)
+            }, Frame)
 
-            -- Slider Background
-            local SliderBar = Create("Frame", {
-                Name = "SliderBar",
+            -- Bar
 
-                Position = UDim2.new(0, 12, 0, 39),
-                Size = UDim2.new(1, -24, 0, 6),
+            local Bar = Create("TextButton", {
+                Name = "Bar",
 
-                BackgroundColor3 = Theme.Secondary,
-                BorderSizePixel = 0,
+                Position = UDim2.new(0, 13, 0, 37),
+                Size = UDim2.new(1, -26, 0, 5),
 
-                Active = true
-            }, SliderFrame)
+                BackgroundColor3 = Theme.Background,
 
-            Corner(SliderBar, 10)
+                Text = "",
+                AutoButtonColor = false
+            }, Frame)
 
-            -- Slider Fill
+            Corner(Bar, 10)
+
+            -- Fill
+
             local Fill = Create("Frame", {
                 Name = "Fill",
 
                 Size = UDim2.new(0, 0, 1, 0),
 
-                BackgroundColor3 = Theme.Accent,
-                BorderSizePixel = 0,
-
-                Active = false
-            }, SliderBar)
+                BackgroundColor3 = Theme.AccentDark,
+                BorderSizePixel = 0
+            }, Bar)
 
             Corner(Fill, 10)
 
-            -- Slider Knob
-            local SliderKnob = Create("Frame", {
+            -- Knob
+
+            local Knob = Create("Frame", {
                 Name = "Knob",
 
-                Size = UDim2.fromOffset(14, 14),
+                Size = UDim2.fromOffset(13, 13),
 
-                Position = UDim2.new(0, -7, 0.5, -7),
+                Position = UDim2.new(0, -6, 0.5, -6),
 
                 BackgroundColor3 = Theme.Text,
-                BorderSizePixel = 0,
+                BorderSizePixel = 0
+            }, Bar)
 
-                Active = false
-            }, SliderBar)
+            Corner(Knob, 20)
 
-            Corner(SliderKnob, 20)
-            Stroke(SliderKnob, Theme.Accent)
+            -- Callback Queue
 
             local function QueueCallback(value)
-                pendingCallbackValue = value
 
-                if callbackScheduled then
+                pendingValue = value
+
+                if callbackPending then
                     return
                 end
 
-                callbackScheduled = true
+                callbackPending = true
 
                 task.defer(function()
-                    callbackScheduled = false
+
+                    callbackPending = false
 
                     if Window.Destroyed then
                         return
                     end
 
-                    SafeCallback(callback, pendingCallbackValue)
+                    SafeCallback(callback, pendingValue)
                 end)
             end
 
+            -- Visual Update
+
             local function UpdateVisuals()
+
                 local ratio = 0
 
                 if range > 0 then
-                    ratio = (currentValue - minimum) / range
+                    ratio = math.clamp(
+                        (currentValue - minimum) / range,
+                        0,
+                        1
+                    )
                 end
-
-                ratio = math.clamp(ratio, 0, 1)
 
                 Fill.Size = UDim2.new(ratio, 0, 1, 0)
 
-                SliderKnob.Position = UDim2.new(
-                    ratio, -7,
-                    0.5, -7
+                Knob.Position = UDim2.new(
+                    ratio, -6,
+                    0.5, -6
                 )
 
                 ValueLabel.Text = FormatNumber(currentValue)
             end
 
+            -- Set Value
+
             local function SetValue(value, fireCallback)
+
                 value = tonumber(value)
 
                 if not value or value ~= value then
@@ -999,14 +1102,14 @@ function TecX:CreateWindow(config)
 
                 if range > 0 then
                     local steps = math.floor(
-                        ((value - minimum) / sliderStep) + 0.5
+                        ((value - minimum) / step) + 0.5
                     )
 
-                    value = minimum + steps * sliderStep
+                    value = minimum + steps * step
                     value = math.clamp(value, minimum, maximum)
                 end
 
-                value = tonumber(string.format("%.4f", value))
+                value = math.floor(value * 10000 + 0.5) / 10000
 
                 if currentValue == value then
                     return
@@ -1017,29 +1120,32 @@ function TecX:CreateWindow(config)
                 UpdateVisuals()
 
                 if fireCallback then
-                    QueueCallback(currentValue)
+                    QueueCallback(value)
                 end
             end
 
+            -- Drag
+
             local function UpdateFromPosition(positionX)
-                if SliderBar.AbsoluteSize.X <= 0 then
+
+                if Bar.AbsoluteSize.X <= 0 then
                     return
                 end
 
                 local relative = (
-                    positionX - SliderBar.AbsolutePosition.X
-                ) / SliderBar.AbsoluteSize.X
+                    positionX - Bar.AbsolutePosition.X
+                ) / Bar.AbsoluteSize.X
 
                 relative = math.clamp(relative, 0, 1)
 
                 SetValue(
-                    minimum + range * relative,
+                    minimum + relative * range,
                     true
                 )
             end
 
-            -- Shared Input Manager
-            SliderBar.InputBegan:Connect(function(input)
+            Bar.InputBegan:Connect(function(input)
+
                 local inputType = input.UserInputType
 
                 if inputType == Enum.UserInputType.MouseButton1
@@ -1054,7 +1160,6 @@ function TecX:CreateWindow(config)
                 end
             end)
 
-            -- Default Value
             SetValue(defaultVal or minimum, false)
             UpdateVisuals()
 
@@ -1072,94 +1177,102 @@ function TecX:CreateWindow(config)
         end
 
         --==================================================
-        -- DROPDOWN
+        -- ADD DROPDOWN
         --==================================================
 
         function Tab:AddDropdown(dropdownName, optionsList, callback)
+
             if Window.Destroyed then
                 return nil
             end
 
-            local options = typeof(optionsList) == "table" and optionsList or {}
+            local options = typeof(optionsList) == "table"
+                and optionsList
+                or {}
 
             local selectedOption = nil
-            local isOpen = false
+            local selectedIndex = nil
+            local opened = false
 
             local headerHeight = 44
-            local maximumDropdownHeight = 150
+            local maximumHeight = 150
 
-            -- Main Frame
-            local DropdownFrame = Create("Frame", {
+            local Frame = Create("Frame", {
                 Name = "Dropdown",
 
                 Size = UDim2.new(1, 0, 0, headerHeight),
 
-                BackgroundTransparency = 1,
+                BackgroundColor3 = Theme.Element,
+                BorderSizePixel = 0,
+
                 ClipsDescendants = true
             }, Container)
 
+            Corner(Frame, 8)
+            Stroke(Frame, 0.5)
+
             -- Header
+
             local Header = Create("TextButton", {
                 Name = "Header",
 
-                Size = UDim2.new(1, 0, 0, 40),
+                Size = UDim2.new(1, 0, 0, 44),
 
-                BackgroundColor3 = Theme.Element,
+                BackgroundTransparency = 1,
 
-                Text = tostring(dropdownName) .. "   •   Seçiniz",
+                Text = "",
+                AutoButtonColor = false
+            }, Frame)
+
+            local HeaderText = Create("TextLabel", {
+                Position = UDim2.fromOffset(13, 0),
+                Size = UDim2.new(1, -60, 1, 0),
+
+                BackgroundTransparency = 1,
+
+                Text = tostring(dropdownName) .. "  /  Seçiniz",
                 TextColor3 = Theme.Text,
 
                 TextSize = 12,
                 Font = Enum.Font.GothamMedium,
 
-                TextXAlignment = Enum.TextXAlignment.Left,
-
-                AutoButtonColor = false
-            }, DropdownFrame)
-
-            Corner(Header, 8)
-
-            AddPadding(Header, 12, 35, 0, 0)
+                TextXAlignment = Enum.TextXAlignment.Left
+            }, Header)
 
             local Arrow = Create("TextLabel", {
-                Name = "Arrow",
-
-                Position = UDim2.new(1, -30, 0, 0),
-                Size = UDim2.fromOffset(22, 40),
+                Position = UDim2.new(1, -35, 0, 0),
+                Size = UDim2.fromOffset(25, 44),
 
                 BackgroundTransparency = 1,
 
                 Text = "⌄",
                 TextColor3 = Theme.SubText,
 
-                TextSize = 18,
-                Font = Enum.Font.GothamBold
+                TextSize = 17,
+                Font = Enum.Font.Gotham
             }, Header)
 
-            -- Options Container
+            -- Options
+
             local OptionsContainer = Create("ScrollingFrame", {
                 Name = "Options",
 
                 Position = UDim2.fromOffset(0, headerHeight),
                 Size = UDim2.new(1, 0, 0, 0),
 
-                BackgroundColor3 = Theme.Secondary,
-                BackgroundTransparency = 0,
-
+                BackgroundColor3 = Theme.Surface,
                 BorderSizePixel = 0,
 
-                CanvasSize = UDim2.new(0, 0, 0, 0),
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = Theme.AccentDark,
 
                 ScrollingDirection = Enum.ScrollingDirection.Y,
-                ScrollBarThickness = 3,
-                ScrollBarImageColor3 = Theme.Accent,
 
+                CanvasSize = UDim2.new(0, 0, 0, 0),
                 AutomaticCanvasSize = Enum.AutomaticSize.None
-            }, DropdownFrame)
+            }, Frame)
 
-            Corner(OptionsContainer, 8)
-
-            AddPadding(OptionsContainer, 5, 5, 5, 5)
+            Padding(OptionsContainer, 6, 6, 5, 5)
 
             local OptionsLayout = Create("UIListLayout", {
                 Padding = UDim.new(0, 4),
@@ -1167,67 +1280,73 @@ function TecX:CreateWindow(config)
             }, OptionsContainer)
 
             local function UpdateOptionsCanvas()
+
+                local height = OptionsLayout.AbsoluteContentSize.Y + 10
+
                 OptionsContainer.CanvasSize = UDim2.new(
                     0, 0,
-                    0, OptionsLayout.AbsoluteContentSize.Y + 10
+                    0, height
                 )
             end
 
             local function UpdateHeader()
-                local selectedText = selectedOption == nil
+
+                local value = selectedOption == nil
                     and "Seçiniz"
                     or tostring(selectedOption)
 
-                Header.Text = tostring(dropdownName)
-                    .. "   •   "
-                    .. selectedText
+                HeaderText.Text = tostring(dropdownName)
+                    .. "  /  "
+                    .. value
             end
 
-            -- Build Options
-            if #options == 0 then
-                local emptyLabel = Create("TextLabel", {
-                    Name = "Empty",
+            -- Create Options
 
-                    Size = UDim2.new(1, -6, 0, 28),
+            if #options == 0 then
+
+                Create("TextLabel", {
+                    Size = UDim2.new(1, -8, 0, 28),
 
                     BackgroundTransparency = 1,
 
                     Text = "Seçenek bulunamadı",
                     TextColor3 = Theme.SubText,
 
-                    TextSize = 12,
+                    TextSize = 11,
                     Font = Enum.Font.Gotham
                 }, OptionsContainer)
+
             else
+
                 for index, option in ipairs(options) do
+
                     local optionValue = option
                     local optionIndex = index
 
                     local OptionButton = Create("TextButton", {
                         Name = "Option_" .. index,
 
-                        Size = UDim2.new(1, -6, 0, 28),
+                        Size = UDim2.new(1, -8, 0, 29),
 
                         BackgroundColor3 = Theme.Element,
 
                         Text = tostring(optionValue),
                         TextColor3 = Theme.SubText,
 
-                        TextSize = 12,
+                        TextSize = 11,
                         Font = Enum.Font.Gotham,
 
                         TextXAlignment = Enum.TextXAlignment.Left,
 
-                        AutoButtonColor = false,
-                        LayoutOrder = index
+                        AutoButtonColor = false
                     }, OptionsContainer)
 
+                    Padding(OptionButton, 10, 5, 0, 0)
                     Corner(OptionButton, 6)
-                    AddPadding(OptionButton, 9, 5, 0, 0)
 
                     OptionButton.MouseEnter:Connect(function()
                         Tween(OptionButton, {
-                            BackgroundColor3 = Theme.ElementHover,
+                            BackgroundColor3 = Theme.Hover,
                             TextColor3 = Theme.Text
                         })
                     end)
@@ -1240,23 +1359,25 @@ function TecX:CreateWindow(config)
                     end)
 
                     OptionButton.MouseButton1Click:Connect(function()
+
                         selectedOption = optionValue
+                        selectedIndex = optionIndex
 
                         UpdateHeader()
 
-                        isOpen = false
+                        opened = false
 
-                        Tween(DropdownFrame, {
+                        Tween(Frame, {
                             Size = UDim2.new(1, 0, 0, headerHeight)
-                        }, 0.18)
+                        }, 0.16)
 
                         Tween(OptionsContainer, {
                             Size = UDim2.new(1, 0, 0, 0)
-                        }, 0.18)
+                        }, 0.16)
 
                         Tween(Arrow, {
                             Rotation = 0
-                        }, 0.18)
+                        }, 0.16)
 
                         SafeCallback(callback, optionValue, optionIndex)
                     end)
@@ -1266,35 +1387,37 @@ function TecX:CreateWindow(config)
             UpdateOptionsCanvas()
 
             local contentHeight = OptionsLayout.AbsoluteContentSize.Y + 10
-            local visibleHeight = math.min(
-                contentHeight,
-                maximumDropdownHeight
-            )
+            local visibleHeight = math.min(contentHeight, maximumHeight)
 
             OptionsContainer.ScrollingEnabled =
-                contentHeight > maximumDropdownHeight
+                contentHeight > maximumHeight
+
+            -- Open / Close
 
             local function SetOpen(value)
-                isOpen = value
 
-                local targetHeight = isOpen and visibleHeight or 0
-                local frameHeight = headerHeight + targetHeight
+                opened = value
 
-                Tween(DropdownFrame, {
-                    Size = UDim2.new(1, 0, 0, frameHeight)
-                }, 0.2)
+                local height = opened and visibleHeight or 0
+
+                Tween(Frame, {
+                    Size = UDim2.new(
+                        1, 0,
+                        0, headerHeight + height
+                    )
+                }, 0.18)
 
                 Tween(OptionsContainer, {
-                    Size = UDim2.new(1, 0, 0, targetHeight)
-                }, 0.2)
+                    Size = UDim2.new(1, 0, 0, height)
+                }, 0.18)
 
                 Tween(Arrow, {
-                    Rotation = isOpen and 180 or 0
-                }, 0.2)
+                    Rotation = opened and 180 or 0
+                }, 0.18)
             end
 
             Header.MouseButton1Click:Connect(function()
-                SetOpen(not isOpen)
+                SetOpen(not opened)
             end)
 
             local DropdownObject = {}
@@ -1304,14 +1427,18 @@ function TecX:CreateWindow(config)
             end
 
             function DropdownObject:Set(value, fireCallback)
+
                 for index, option in ipairs(options) do
+
                     if option == value then
-                        selectedOption = option
+
+                        selectedOption = value
+                        selectedIndex = index
 
                         UpdateHeader()
 
                         if fireCallback then
-                            SafeCallback(callback, option, index)
+                            SafeCallback(callback, value, index)
                         end
 
                         return true
@@ -1324,7 +1451,10 @@ function TecX:CreateWindow(config)
             return DropdownObject
         end
 
-        -- Select first tab automatically
+        --==================================================
+        -- INITIAL TAB
+        --==================================================
+
         if #Window.Tabs == 1 then
             SelectTab(Tab)
         end
@@ -1346,35 +1476,25 @@ local ActiveNotifications = {}
 local NotificationSequence = 0
 
 local function CreateNotificationSystem()
+
     if NotificationGui and NotificationGui.Parent then
         return
     end
 
-    local PlayerGui = Player:WaitForChild("PlayerGui")
+    RemoveOldGui("TecX_Notifications")
 
-    pcall(function()
-        local old = CoreGui:FindFirstChild("TecX_Notifications")
-
-        if old then
-            old:Destroy()
-        end
-    end)
-
-    local oldPlayerGui = PlayerGui:FindFirstChild("TecX_Notifications")
-
-    if oldPlayerGui then
-        oldPlayerGui:Destroy()
-    end
-
-    NotificationGui = CreateScreenGui("TecX_Notifications", 100)
+    NotificationGui = CreateScreenGui(
+        "TecX_Notifications",
+        100
+    )
 
     NotificationRoot = Create("Frame", {
-        Name = "NotificationRoot",
+        Name = "Root",
 
-        Position = UDim2.new(1, -16, 0, 16),
+        Position = UDim2.new(1, -15, 0, 15),
         AnchorPoint = Vector2.new(1, 0),
 
-        Size = UDim2.fromOffset(320, 430),
+        Size = UDim2.fromOffset(310, 400),
 
         BackgroundTransparency = 1,
         ClipsDescendants = true
@@ -1391,13 +1511,21 @@ local function CreateNotificationSystem()
 end
 
 local function RemoveNotification(card, instant)
+
     if not card or not card.Parent then
         return
     end
 
-    for index = #ActiveNotifications, 1, -1 do
-        if ActiveNotifications[index] == card then
-            table.remove(ActiveNotifications, index)
+    if card:GetAttribute("Removing") then
+        return
+    end
+
+    card:SetAttribute("Removing", true)
+
+    for i = #ActiveNotifications, 1, -1 do
+
+        if ActiveNotifications[i] == card then
+            table.remove(ActiveNotifications, i)
             break
         end
     end
@@ -1408,10 +1536,12 @@ local function RemoveNotification(card, instant)
     end
 
     Tween(card, {
-        GroupTransparency = 1
-    }, 0.18)
+        GroupTransparency = 1,
+        Position = UDim2.new(1, 20, 0, 0)
+    }, 0.17)
 
     task.delay(0.2, function()
+
         if card.Parent then
             card:Destroy()
         end
@@ -1419,7 +1549,9 @@ local function RemoveNotification(card, instant)
 end
 
 function TecX:Notify(config, content, duration)
+
     if typeof(config) ~= "table" then
+
         config = {
             Title = tostring(config or "TecX"),
             Content = tostring(content or ""),
@@ -1443,75 +1575,75 @@ function TecX:Notify(config, content, duration)
         tostring(config.Type or "info")
     )
 
-    local accentColor = Theme.Accent
+    local accent = Theme.AccentDark
 
     if notificationType == "success" then
-        accentColor = Theme.Success
+        accent = Theme.Success
     elseif notificationType == "error" then
-        accentColor = Theme.Error
+        accent = Theme.Error
     elseif notificationType == "warning" then
-        accentColor = Theme.Warning
+        accent = Theme.Warning
     end
 
-    -- Limit active notifications
-    while #ActiveNotifications >= 5 do
+    -- Maximum 4 Notifications
+
+    while #ActiveNotifications >= 4 do
         RemoveNotification(ActiveNotifications[1], true)
     end
 
-    -- Notification Card
+    -- Card
+
     local Card = Create("CanvasGroup", {
         Name = "Notification",
 
-        Size = UDim2.fromOffset(300, 82),
+        Size = UDim2.fromOffset(295, 78),
 
-        BackgroundColor3 = Theme.Secondary,
+        BackgroundColor3 = Theme.Surface,
+        BackgroundTransparency = 0,
+
         GroupTransparency = 1,
-
-        BorderSizePixel = 0,
 
         LayoutOrder = -NotificationSequence,
 
+        BorderSizePixel = 0,
         ClipsDescendants = true
     }, NotificationRoot)
 
     Corner(Card, 9)
-    Stroke(Card)
+    Stroke(Card, 0.2)
 
-    -- Accent
-    local Accent = Create("Frame", {
-        Name = "Accent",
+    -- Accent Line
 
+    Create("Frame", {
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.fromOffset(3, 82),
+        Size = UDim2.new(0, 3, 1, 0),
 
-        BackgroundColor3 = accentColor,
+        BackgroundColor3 = accent,
         BorderSizePixel = 0
     }, Card)
 
     -- Title
-    local TitleLabel = Create("TextLabel", {
-        Name = "Title",
 
-        Position = UDim2.fromOffset(14, 8),
-        Size = UDim2.new(1, -25, 0, 21),
+    Create("TextLabel", {
+        Position = UDim2.fromOffset(13, 8),
+        Size = UDim2.new(1, -22, 0, 20),
 
         BackgroundTransparency = 1,
 
         Text = title,
         TextColor3 = Theme.Text,
 
-        TextSize = 13,
+        TextSize = 12,
         Font = Enum.Font.GothamBold,
 
         TextXAlignment = Enum.TextXAlignment.Left
     }, Card)
 
     -- Content
-    local ContentLabel = Create("TextLabel", {
-        Name = "Content",
 
-        Position = UDim2.fromOffset(14, 30),
-        Size = UDim2.new(1, -25, 0, 38),
+    Create("TextLabel", {
+        Position = UDim2.fromOffset(13, 29),
+        Size = UDim2.new(1, -23, 0, 37),
 
         BackgroundTransparency = 1,
 
@@ -1528,11 +1660,10 @@ function TecX:Notify(config, content, duration)
     }, Card)
 
     -- Progress Background
-    local ProgressBackground = Create("Frame", {
-        Name = "ProgressBackground",
 
-        Position = UDim2.new(0, 14, 1, -5),
-        Size = UDim2.new(1, -26, 0, 2),
+    local ProgressBackground = Create("Frame", {
+        Position = UDim2.new(0, 13, 1, -5),
+        Size = UDim2.new(1, -24, 0, 2),
 
         BackgroundColor3 = Theme.Border,
         BorderSizePixel = 0
@@ -1540,13 +1671,10 @@ function TecX:Notify(config, content, duration)
 
     Corner(ProgressBackground, 5)
 
-    -- Progress
     local Progress = Create("Frame", {
-        Name = "Progress",
-
         Size = UDim2.new(1, 0, 1, 0),
 
-        BackgroundColor3 = accentColor,
+        BackgroundColor3 = accent,
         BorderSizePixel = 0
     }, ProgressBackground)
 
@@ -1555,17 +1683,22 @@ function TecX:Notify(config, content, duration)
     table.insert(ActiveNotifications, Card)
 
     -- Fade In
+
     Tween(Card, {
-        GroupTransparency = 0
+        GroupTransparency = 0,
+        Position = UDim2.new(0, 0, 0, 0)
     }, 0.2)
 
     -- Progress Animation
+
     Tween(Progress, {
         Size = UDim2.new(0, 0, 1, 0)
     }, displayDuration)
 
     -- Auto Remove
+
     task.delay(displayDuration, function()
+
         if Card.Parent then
             RemoveNotification(Card, false)
         end
@@ -1574,8 +1707,8 @@ function TecX:Notify(config, content, duration)
     return Card
 end
 
--- Optional notification cleanup
 function TecX:DestroyNotifications()
+
     if NotificationGui then
         NotificationGui:Destroy()
     end
